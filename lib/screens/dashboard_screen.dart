@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+// Import file lokal kamu
 import '../models/siswa.dart';
+import '../models/mapel.dart';
 import '../services/auth_service.dart';
 import '../screens/login_screen.dart';
 import '../screens/kalender_screen.dart';
@@ -220,7 +224,6 @@ class HomeContent extends StatelessWidget {
           actions: [
             IconButton(
               onPressed: () {
-                // Notification action
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Tidak ada notifikasi baru')),
                 );
@@ -257,19 +260,7 @@ class HomeContent extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Welcome Text
-                Text(
-                  'Cari disini!!',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[800],
-                    height: 1.3,
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Search Bar dengan shadow
+                // Search Bar (Sekarang berfungsi sebagai tombol pemicu search)
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -283,6 +274,18 @@ class HomeContent extends StatelessWidget {
                     ],
                   ),
                   child: TextField(
+                    readOnly: true, // Agar keyboard tidak muncul di halaman ini
+                    onTap: () {
+                      // Membuka halaman pencarian
+                      showSearch(
+                        context: context,
+                        // Pass idKelas dan idSiswa untuk navigasi
+                        delegate: MapelSearchDelegate(
+                          idKelas: siswa.idKelas,
+                          idSiswa: siswa.idSiswa,
+                        ),
+                      );
+                    },
                     decoration: InputDecoration(
                       hintText: 'Cari mata pelajaran...',
                       hintStyle: TextStyle(color: Colors.grey[400]),
@@ -295,11 +298,7 @@ class HomeContent extends StatelessWidget {
                         ),
                         child: IconButton(
                           onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Filter akan segera hadir'),
-                              ),
-                            );
+                            // Bisa digunakan untuk filter tambahan nanti
                           },
                           icon: Icon(Icons.tune, color: Colors.blue.shade700),
                         ),
@@ -313,21 +312,6 @@ class HomeContent extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 28),
-
-                // Menu Cards Grid
-                _buildMenuCard(
-                  context,
-                  title: 'Dashboard',
-                  subtitle: 'Lihat statistik pembelajaran',
-                  icon: Icons.dashboard_outlined,
-                  colors: [Colors.blue.shade600, Colors.blue.shade800],
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Menu Dashboard diklik')),
-                    );
-                  },
-                ),
-                const SizedBox(height: 16),
 
                 _buildMenuCard(
                   context,
@@ -422,6 +406,134 @@ class HomeContent extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+// =========================================================
+// LOGIKA SEARCH DELEGATE (Mencari Mapel sesuai Kelas User)
+// =========================================================
+class MapelSearchDelegate extends SearchDelegate {
+  final int idKelas;
+  final int idSiswa;
+
+  MapelSearchDelegate({required this.idKelas, required this.idSiswa});
+
+  @override
+  String? get searchFieldLabel => 'Cari nama pelajaran...';
+
+  @override
+  List<Widget>? buildActions(BuildContext context) {
+    return [
+      if (query.isNotEmpty)
+        IconButton(
+          icon: const Icon(Icons.clear),
+          onPressed: () {
+            query = '';
+            showSuggestions(context);
+          },
+        ),
+    ];
+  }
+
+  @override
+  Widget? buildLeading(BuildContext context) {
+    return IconButton(
+      icon: const Icon(Icons.arrow_back),
+      onPressed: () => close(context, null),
+    );
+  }
+
+  @override
+  Widget buildResults(BuildContext context) {
+    return _buildSearchBody(context);
+  }
+
+  @override
+  Widget buildSuggestions(BuildContext context) {
+    return _buildSearchBody(context);
+  }
+
+  Widget _buildSearchBody(BuildContext context) {
+    if (query.isEmpty) {
+      return const Center(
+        child: Text(
+          'Ketik nama mata pelajaran',
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
+    final supabase = Supabase.instance.client;
+
+    return FutureBuilder(
+      future: supabase
+          .from('mata_pelajaran')
+          .select()
+          .eq('id_kelas', idKelas) // FILTER 1: Hanya kelas user
+          .ilike('nama_mapel', '%$query%') // FILTER 2: Pencarian nama
+          .order('nama_mapel', ascending: true),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError) {
+          return Center(child: Text('Error: ${snapshot.error}'));
+        }
+
+        final data = snapshot.data as List<dynamic>;
+
+        if (data.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.search_off, size: 60, color: Colors.grey[300]),
+                const SizedBox(height: 10),
+                Text(
+                  'Mata pelajaran "$query" tidak ditemukan',
+                  style: TextStyle(color: Colors.grey[500]),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          itemCount: data.length,
+          itemBuilder: (context, index) {
+            final mapel = data[index];
+            return ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Colors.blue.shade50,
+                child: Icon(Icons.book, color: Colors.blue.shade700, size: 20),
+              ),
+              title: Text(
+                mapel['nama_mapel'] ?? 'Tanpa Nama',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: Text('Pengajar ID: ${mapel['id_pengajar']}'),
+              onTap: () {
+                // Tutup search delegate
+                close(context, null);
+
+                // Buat object Mapel dari data JSON
+                final mapelObj = Mapel.fromJson(mapel);
+
+                // Navigasi ke detail mata pelajaran
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        MapelDetailScreen(mapel: mapelObj, idSiswa: idSiswa),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
     );
   }
 }
