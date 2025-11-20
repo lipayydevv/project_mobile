@@ -1,5 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:intl/intl.dart'; // Jangan lupa add intl di pubspec.yaml
+
+// 1. Model sederhana untuk menampung data deadline
+class DeadlineEvent {
+  final String title;
+  final String type; // 'Kuis' atau 'Tugas'
+  final String description;
+  final DateTime deadline;
+
+  DeadlineEvent({
+    required this.title,
+    required this.type,
+    required this.description,
+    required this.deadline,
+  });
+}
 
 class KalenderScreen extends StatefulWidget {
   const KalenderScreen({super.key});
@@ -9,41 +26,106 @@ class KalenderScreen extends StatefulWidget {
 }
 
 class _KalenderScreenState extends State<KalenderScreen> {
-  late final ValueNotifier<List<DateTime>> _selectedDays;
+  // Mengubah ValueNotifier menjadi Map untuk menyimpan event per tanggal
+  late Map<DateTime, List<DeadlineEvent>> _events;
+
   CalendarFormat _calendarFormat = CalendarFormat.month;
   DateTime _focusedDay = DateTime.now();
+  DateTime? _selectedDay;
+
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _selectedDays = ValueNotifier([]);
+    _events = {};
+    _selectedDay = _focusedDay;
+    _fetchDeadlines(); // Ambil data saat aplikasi dibuka
   }
 
-  @override
-  void dispose() {
-    _selectedDays.dispose();
-    super.dispose();
+  // 2. Fungsi mengambil data dari Supabase
+  Future<void> _fetchDeadlines() async {
+    try {
+      final supabase = Supabase.instance.client;
+
+      // Ambil data Kuis
+      final List<dynamic> kuisData = await supabase
+          .from('kuis')
+          .select('judul, deskripsi, deadline');
+
+      // Ambil data Tugas
+      final List<dynamic> tugasData = await supabase
+          .from('tugas')
+          .select('judul, deskripsi, deadline');
+
+      final Map<DateTime, List<DeadlineEvent>> loadedEvents = {};
+
+      // Helper function untuk memasukkan data ke map
+      void addEvent(String type, dynamic item) {
+        if (item['deadline'] != null) {
+          // Parse string timestamp ke DateTime
+          final date = DateTime.parse(
+            item['deadline'],
+          ).toLocal(); // Konversi ke waktu lokal
+
+          // Normalisasi tanggal (hapus jam/menit) untuk key Map agar presisi
+          final dateKey = DateTime.utc(date.year, date.month, date.day);
+
+          final event = DeadlineEvent(
+            title: item['judul'] ?? 'Tanpa Judul',
+            type: type,
+            description: item['deskripsi'] ?? '-',
+            deadline: date,
+          );
+
+          if (loadedEvents[dateKey] == null) {
+            loadedEvents[dateKey] = [];
+          }
+          loadedEvents[dateKey]!.add(event);
+        }
+      }
+
+      // Proses data Kuis
+      for (var item in kuisData) {
+        addEvent('Kuis', item);
+      }
+
+      // Proses data Tugas
+      for (var item in tugasData) {
+        addEvent('Tugas', item);
+      }
+
+      setState(() {
+        _events = loadedEvents;
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint('Error fetching deadlines: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
-  bool _isSameDay(DateTime? a, DateTime? b) {
-    if (a == null || b == null) return false;
-    return a.year == b.year && a.month == b.month && a.day == b.day;
+  // Fungsi helper untuk mengambil event berdasarkan hari
+  List<DeadlineEvent> _getEventsForDay(DateTime day) {
+    // Pastikan key menggunakan UTC midnight yang sama dengan saat generate map
+    return _events[DateTime.utc(day.year, day.month, day.day)] ?? [];
   }
 
   @override
   Widget build(BuildContext context) {
+    // Ambil event untuk hari yang sedang dipilih untuk ditampilkan di list bawah
+    final selectedEvents = _getEventsForDay(_selectedDay ?? _focusedDay);
+
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.white,
         title: const Text(
-          'Kalender',
-          style: TextStyle(
-            color: Colors.black87,
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-          ),
+          'Kalender Akademik',
+          style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600),
         ),
         leading: IconButton(
           onPressed: () => Navigator.pop(context),
@@ -68,41 +150,36 @@ class _KalenderScreenState extends State<KalenderScreen> {
             ),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
-              child: TableCalendar(
+              child: TableCalendar<DeadlineEvent>(
                 firstDay: DateTime.utc(2024, 1, 1),
                 lastDay: DateTime.utc(2030, 12, 31),
                 focusedDay: _focusedDay,
                 calendarFormat: _calendarFormat,
-                selectedDayPredicate: (day) {
-                  return _selectedDays.value.any((d) => _isSameDay(d, day));
-                },
+
+                // 3. Integrasi Event Loader (Ini yang memunculkan titik/marker)
+                eventLoader: _getEventsForDay,
+
+                selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
                 onDaySelected: (selectedDay, focusedDay) {
                   setState(() {
-                    _focusedDay = focusedDay;
-                    final index = _selectedDays.value.indexWhere(
-                      (d) => _isSameDay(d, selectedDay),
-                    );
-                    if (index != -1) {
-                      _selectedDays.value = List.from(_selectedDays.value)
-                        ..removeAt(index);
-                    } else {
-                      _selectedDays.value = List.from(_selectedDays.value)
-                        ..add(selectedDay);
-                    }
-                  });
-                },
-                onPageChanged: (focusedDay) {
-                  setState(() {
+                    _selectedDay = selectedDay;
                     _focusedDay = focusedDay;
                   });
                 },
                 onFormatChanged: (format) {
-                  setState(() {
-                    _calendarFormat = format;
-                  });
+                  if (_calendarFormat != format) {
+                    setState(() => _calendarFormat = format);
+                  }
                 },
+                onPageChanged: (focusedDay) => _focusedDay = focusedDay,
+
+                // Styling Marker (Titik penanda deadline)
                 calendarStyle: CalendarStyle(
-                  outsideDaysVisible: false,
+                  markersMaxCount: 3,
+                  markerDecoration: BoxDecoration(
+                    color: Colors.red.shade400,
+                    shape: BoxShape.circle,
+                  ),
                   todayDecoration: BoxDecoration(
                     color: Colors.blue.shade400,
                     shape: BoxShape.circle,
@@ -111,142 +188,87 @@ class _KalenderScreenState extends State<KalenderScreen> {
                     color: Colors.blue.shade700,
                     shape: BoxShape.circle,
                   ),
-                  todayTextStyle: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  selectedTextStyle: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  defaultTextStyle: const TextStyle(
-                    color: Colors.black87,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  weekendTextStyle: TextStyle(
-                    color: Colors.red[700],
-                    fontWeight: FontWeight.w500,
-                  ),
-                  cellMargin: const EdgeInsets.all(6),
                 ),
                 headerStyle: HeaderStyle(
-                  formatButtonVisible: true,
+                  formatButtonVisible:
+                      false, // Menyembunyikan tombol format agar lebih rapi
                   titleCentered: true,
-                  formatButtonShowsNext: false,
-                  formatButtonDecoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  formatButtonTextStyle: TextStyle(
-                    color: Colors.blue.shade700,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  titleTextStyle: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.black87,
-                  ),
-                  leftChevronIcon: Icon(
-                    Icons.chevron_left,
-                    color: Colors.blue.shade700,
-                  ),
-                  rightChevronIcon: Icon(
-                    Icons.chevron_right,
-                    color: Colors.blue.shade700,
-                  ),
-                ),
-                daysOfWeekStyle: DaysOfWeekStyle(
-                  weekdayStyle: TextStyle(
-                    color: Colors.grey[700],
-                    fontWeight: FontWeight.w600,
-                  ),
-                  weekendStyle: TextStyle(
-                    color: Colors.red[700],
-                    fontWeight: FontWeight.w600,
-                  ),
                 ),
               ),
             ),
           ),
 
           // Info Card
-          ValueListenableBuilder<List<DateTime>>(
-            valueListenable: _selectedDays,
-            builder: (context, value, _) {
-              return Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.blue.shade600, Colors.blue.shade400],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.blue.shade600, Colors.blue.shade400],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.blue.withOpacity(0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.blue.withOpacity(0.3),
-                      blurRadius: 12,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
+                  child: const Icon(
+                    Icons.notifications_active,
+                    color: Colors.white,
+                    size: 28,
+                  ),
                 ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Deadline Hari Ini',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.9),
+                          fontSize: 13,
+                        ),
                       ),
-                      child: Icon(
-                        value.isEmpty ? Icons.calendar_today : Icons.event_note,
-                        color: Colors.white,
-                        size: 28,
+                      const SizedBox(height: 4),
+                      Text(
+                        selectedEvents.isEmpty
+                            ? 'Tidak ada deadline'
+                            : '${selectedEvents.length} Kegiatan',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            value.isEmpty
-                                ? 'Belum ada tanggal dipilih'
-                                : '${value.length} Tanggal Terpilih',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            value.isEmpty
-                                ? 'Ketuk tanggal untuk memilih'
-                                : 'Ketuk lagi untuk membatalkan pilihan',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.9),
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              );
-            },
+              ],
+            ),
           ),
 
-          // List tanggal terpilih
           const SizedBox(height: 16),
+
+          // List Deadline
           Expanded(
-            child: ValueListenableBuilder<List<DateTime>>(
-              valueListenable: _selectedDays,
-              builder: (context, value, _) {
-                if (value.isEmpty) {
-                  return Center(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : selectedEvents.isEmpty
+                ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -257,126 +279,112 @@ class _KalenderScreenState extends State<KalenderScreen> {
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'Tidak ada jadwal',
+                          'Tidak ada deadline di tanggal ini',
                           style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
                             color: Colors.grey[400],
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Pilih tanggal untuk menambah jadwal',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[400],
+                            fontSize: 16,
                           ),
                         ),
                       ],
                     ),
-                  );
-                }
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: selectedEvents.length,
+                    itemBuilder: (context, index) {
+                      final event = selectedEvents[index];
+                      final isKuis = event.type == 'Kuis';
 
-                final sortedDays = List<DateTime>.from(value)
-                  ..sort((a, b) => a.compareTo(b));
-
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: sortedDays.length,
-                  itemBuilder: (context, index) {
-                    final date = sortedDays[index];
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border(
+                            left: BorderSide(
+                              color: isKuis ? Colors.orange : Colors.purple,
+                              width: 5,
+                            ),
                           ),
-                        ],
-                      ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.05),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
-                        leading: Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
-                            borderRadius: BorderRadius.circular(10),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
                           ),
-                          child: Icon(
-                            Icons.calendar_month,
-                            color: Colors.blue.shade700,
+                          title: Text(
+                            event.title,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 16,
+                            ),
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 4),
+                              Text(
+                                event.description,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.access_time,
+                                    size: 14,
+                                    color: Colors.grey[600],
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    DateFormat('HH:mm').format(event.deadline),
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isKuis
+                                          ? Colors.orange.shade50
+                                          : Colors.purple.shade50,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      event.type,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: isKuis
+                                            ? Colors.orange.shade700
+                                            : Colors.purple.shade700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
                         ),
-                        title: Text(
-                          '${date.day} ${_getMonthName(date.month)} ${date.year}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
-                        subtitle: Text(
-                          _getDayName(date.weekday),
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 13,
-                          ),
-                        ),
-                        trailing: IconButton(
-                          icon: Icon(Icons.close, color: Colors.grey[400]),
-                          onPressed: () {
-                            setState(() {
-                              _selectedDays.value = List.from(value)
-                                ..removeAt(sortedDays.indexOf(date));
-                            });
-                          },
-                        ),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),
     );
-  }
-
-  String _getMonthName(int month) {
-    const months = [
-      'Januari',
-      'Februari',
-      'Maret',
-      'April',
-      'Mei',
-      'Juni',
-      'Juli',
-      'Agustus',
-      'September',
-      'Oktober',
-      'November',
-      'Desember',
-    ];
-    return months[month - 1];
-  }
-
-  String _getDayName(int weekday) {
-    const days = [
-      'Senin',
-      'Selasa',
-      'Rabu',
-      'Kamis',
-      'Jumat',
-      'Sabtu',
-      'Minggu',
-    ];
-    return days[weekday - 1];
   }
 }
