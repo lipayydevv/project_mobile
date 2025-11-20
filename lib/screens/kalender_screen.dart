@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:intl/intl.dart'; // Jangan lupa add intl di pubspec.yaml
+import 'package:intl/intl.dart';
 
-// 1. Model sederhana untuk menampung data deadline
 class DeadlineEvent {
   final String title;
-  final String type; // 'Kuis' atau 'Tugas'
+  final String type;
   final String description;
   final DateTime deadline;
 
@@ -26,7 +25,6 @@ class KalenderScreen extends StatefulWidget {
 }
 
 class _KalenderScreenState extends State<KalenderScreen> {
-  // Mengubah ValueNotifier menjadi Map untuk menyimpan event per tanggal
   late Map<DateTime, List<DeadlineEvent>> _events;
 
   CalendarFormat _calendarFormat = CalendarFormat.month;
@@ -40,35 +38,26 @@ class _KalenderScreenState extends State<KalenderScreen> {
     super.initState();
     _events = {};
     _selectedDay = _focusedDay;
-    _fetchDeadlines(); // Ambil data saat aplikasi dibuka
+    _fetchDeadlines();
   }
 
-  // 2. Fungsi mengambil data dari Supabase
   Future<void> _fetchDeadlines() async {
     try {
       final supabase = Supabase.instance.client;
 
-      // Ambil data Kuis
       final List<dynamic> kuisData = await supabase
           .from('kuis')
           .select('judul, deskripsi, deadline');
 
-      // Ambil data Tugas
       final List<dynamic> tugasData = await supabase
           .from('tugas')
           .select('judul, deskripsi, deadline');
 
       final Map<DateTime, List<DeadlineEvent>> loadedEvents = {};
 
-      // Helper function untuk memasukkan data ke map
       void addEvent(String type, dynamic item) {
         if (item['deadline'] != null) {
-          // Parse string timestamp ke DateTime
-          final date = DateTime.parse(
-            item['deadline'],
-          ).toLocal(); // Konversi ke waktu lokal
-
-          // Normalisasi tanggal (hapus jam/menit) untuk key Map agar presisi
+          final date = DateTime.parse(item['deadline']).toLocal();
           final dateKey = DateTime.utc(date.year, date.month, date.day);
 
           final event = DeadlineEvent(
