@@ -15,6 +15,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final AuthService _authService = AuthService();
+
   bool _isLoading = false;
   bool _obscurePassword = true;
 
@@ -65,7 +66,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+      backgroundColor: const Color(0xFF0D47A1), // ★ Biru tua elegan
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -73,54 +74,53 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        const Color.fromARGB(255, 30, 229, 106),
-                        const Color.fromARGB(255, 21, 192, 126),
+                // ================== LOGO SMK (Gear + Helm) ==================
+                Center(
+                  child: Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.25),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
                       ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
                     ),
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color.fromARGB(255, 144, 249, 170),
-                        blurRadius: 20,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.school_rounded,
-                    size: 40,
-                    color: Colors.white,
+                    child: const Icon(
+                      Icons.engineering,
+                      color: Color(0xFF0D47A1),
+                      size: 70,
+                    ),
                   ),
                 ),
+
                 const SizedBox(height: 32),
-                Text(
-                  'Selamat Datang',
+
+                const Text(
+                  'E-Learning SMK Riyadul Jannah',
                   style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
-                    color: Colors.grey.shade900,
+                    color: Colors.white,
+                    letterSpacing: 1,
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'Masuk ke akun siswa Anda',
-                  style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
-                ),
+
                 const SizedBox(height: 48),
+
+                // ================== USERNAME ==================
                 _buildTextField(
                   controller: _usernameController,
                   hintText: 'Username',
                   icon: Icons.person_outline_rounded,
                 ),
                 const SizedBox(height: 16),
+
+                // ================== PASSWORD + ICON MATA ==================
                 _buildTextField(
                   controller: _passwordController,
                   hintText: 'Password',
@@ -131,27 +131,29 @@ class _LoginScreenState extends State<LoginScreen> {
                       _obscurePassword
                           ? Icons.visibility_off_rounded
                           : Icons.visibility_rounded,
-                      color: Colors.grey.shade400,
-                      size: 22,
+                      color: Colors.grey.shade500,
                     ),
                     onPressed: () =>
                         setState(() => _obscurePassword = !_obscurePassword),
                   ),
                 ),
+
                 const SizedBox(height: 32),
+
+                // ================== BUTTON LOGIN ==================
                 SizedBox(
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _handleLogin,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color.fromARGB(255, 25, 210, 102),
+                      backgroundColor: const Color(0xFF1565C0),
                       foregroundColor: Colors.white,
-                      elevation: 0,
+                      elevation: 4,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      disabledBackgroundColor: Colors.grey.shade300,
+                      disabledBackgroundColor: Colors.blue.shade200,
                     ),
                     child: _isLoading
                         ? const SizedBox(
@@ -168,7 +170,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             'Masuk',
                             style: TextStyle(
                               fontSize: 16,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w700,
                               letterSpacing: 0.5,
                             ),
                           ),
@@ -182,6 +184,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  // ================== CUSTOM TEXT FIELD ==================
   Widget _buildTextField({
     required TextEditingController controller,
     required String hintText,
@@ -195,7 +198,7 @@ class _LoginScreenState extends State<LoginScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.shade200,
+            color: Colors.black.withOpacity(0.10),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -207,23 +210,12 @@ class _LoginScreenState extends State<LoginScreen> {
         style: TextStyle(fontSize: 15, color: Colors.grey.shade900),
         decoration: InputDecoration(
           hintText: hintText,
-          hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 15),
-          prefixIcon: Icon(icon, color: Colors.grey.shade400, size: 22),
+          hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 15),
+          prefixIcon: Icon(icon, color: Colors.grey.shade500),
           suffixIcon: suffixIcon,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
             borderSide: BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide(
-              color: const Color.fromARGB(255, 25, 210, 84),
-              width: 2,
-            ),
           ),
           filled: true,
           fillColor: Colors.white,
