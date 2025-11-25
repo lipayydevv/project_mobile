@@ -315,8 +315,8 @@ class HomeContent extends StatelessWidget {
 
                 _buildMenuCard(
                   context,
-                  title: 'Kalender Akademik',
-                  subtitle: 'Jadwal dan acara penting',
+                  title: 'Kalender Studi',
+                  subtitle: 'Jadwal tugas dan kuis',
                   icon: Icons.calendar_today_outlined,
                   colors: [Colors.green.shade500, Colors.green.shade700],
                   onTap: () {

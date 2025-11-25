@@ -113,7 +113,7 @@ class _KalenderScreenState extends State<KalenderScreen> {
         elevation: 0,
         backgroundColor: Colors.white,
         title: const Text(
-          'Kalender Akademik',
+          'Kalender Studi',
           style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600),
         ),
         leading: IconButton(
